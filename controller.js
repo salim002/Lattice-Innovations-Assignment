@@ -6,12 +6,14 @@ const uuid = require('uuid');
 const db = require('./db');
 const multer = require('multer');
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: 'uploads/' }); // Setting up multer for file uploads
 
+// API endpoint to Add Patients
 router.post('/addPatient', upload.single('photo'), async (req, res) => {
     try {
         const { name, address, email, phone, password, psychiatrist_id } = req.body;
         let photoFilename = null;
+        // Handling file upload if a photo is provided
         if (req.file) {
             const photoUniqueFilename = uuid.v4() + path.extname(req.file.originalname);
             const photoFilePath = path.join(__dirname, 'uploads', photoUniqueFilename);
@@ -19,9 +21,12 @@ router.post('/addPatient', upload.single('photo'), async (req, res) => {
             photoFilename = photoUniqueFilename;
         }
 
+        // Validation check for required fields
         if (!name || !address || !email || !password || !psychiatrist_id) { 
             return res.status(400).json({ message: 'All fields including psychiatrist_id are required' });
         }
+
+        // Validation checks for password strength
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({ message: 'Invalid email address.' });
@@ -38,6 +43,8 @@ router.post('/addPatient', upload.single('photo'), async (req, res) => {
         if (!/\d/.test(password)) {
             return res.status(400).json({ message: 'Password must contain at least one number.' });
         }
+
+        // Inserting patient data into the database
         const [result] = await db.query('INSERT INTO Patients (patient_name, patient_address, patient_email, patient_phone, patient_password, patient_photo, psychiatrist_id) VALUES (?, ?, ?, ?, ?, ?, ?)', 
             [name, address, email, phone, password, photoFilename, psychiatrist_id]);
 
@@ -48,24 +55,27 @@ router.post('/addPatient', upload.single('photo'), async (req, res) => {
     }
 });
 
-
-
+// API endpoint to get Information of hospitals by their hospitals IDs according to the assignment description
 router.get('/hospital/:hospitalId', async (req, res) => {
     try {
         const hospitalId = req.params.hospitalId;
 
+        // Getting hospital information by hospital ID
         const [hospitalData] = await db.query('SELECT hospital_name FROM Hospitals WHERE hospital_id = ?', [hospitalId]);
         if (hospitalData.length === 0) {
             return res.status(404).json({ message: 'Hospital not found.' });
         }
         const hospitalName = hospitalData[0].hospital_name;
 
+        // Getting count of psychiatrists in the hospital
         const [psychiatristCountData] = await db.query('SELECT COUNT(*) AS psychiatrist_count FROM Psychiatrists WHERE hospital_id = ?', [hospitalId]);
         const psychiatristCount = psychiatristCountData[0].psychiatrist_count;
 
+        // Getting count of patients in the hospital
         const [patientCountData] = await db.query('SELECT COUNT(*) AS patient_count FROM Patients p JOIN Psychiatrists psy ON p.psychiatrist_id = psy.psychiatrist_id WHERE psy.hospital_id = ?', [hospitalId]);
         const patientCount = patientCountData[0].patient_count;
 
+        // Getting details of psychiatrists and their patient counts
         const [psychiatristsData] = await db.query('SELECT psy.psychiatrist_id, psy.psychiatrist_name, COUNT(p.patient_id) AS patients_count FROM Psychiatrists psy LEFT JOIN Patients p ON psy.psychiatrist_id = p.psychiatrist_id WHERE psy.hospital_id = ? GROUP BY psy.psychiatrist_id', [hospitalId]);
 
         const psychiatristDetails = psychiatristsData.map(psychiatrist => ({
@@ -74,6 +84,7 @@ router.get('/hospital/:hospitalId', async (req, res) => {
             patients_count: psychiatrist.patients_count
         }));
 
+        // Constructing response data with hospital information, psychiatrist count, patient count, and psychiatrist details
         const responseData = {
             hospital_name: hospitalName,
             psychiatrist_count: psychiatristCount,
